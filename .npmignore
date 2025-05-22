@@ -1,0 +1,6 @@
+src/
+*.log
+node_modules/
+tsconfig.json
+.github/
+ms-playwright-linux-*

@@ -1,0 +1,35 @@
+{
+  "name": "tesla-buddy-microservice",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "npm-login": "npm login --auth-type=legacy --registry=https://npm.pkg.github.com/ --scope=@limphz",
+    "build": "tsc",
+    "start": "node dist/app.js",
+    "build:start": "npm run build && npm run start"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LimpHz/tesla-buddy-microservice.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/LimpHz/tesla-buddy-microservice/issues"
+  },
+  "homepage": "https://github.com/LimpHz/tesla-buddy-microservice#readme",
+  "dependencies": {
+    "@limphz/tesla-api-utilities": "^0.1.13-alpha",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "typescript": "^5.8.3"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.18",
+    "@types/express": "^5.0.1"
+  }
+}

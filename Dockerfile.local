@@ -1,0 +1,21 @@
+# Use official Playwright image with all browser dependencies
+FROM mcr.microsoft.com/playwright:v1.52.0-jammy
+
+# Accept GitHub token as build argument
+ARG NPM_TOKEN
+
+WORKDIR /usr/src/app
+
+COPY .npmrc .npmrc
+RUN printf "\n//npm.pkg.github.com/:_authToken=${NPM_TOKEN}\n" >> .npmrc
+
+COPY package*.json ./
+COPY node_modules ./node_modules
+
+COPY . .
+
+RUN npm run build
+
+EXPOSE 3000
+
+CMD ["npm", "run", "start"]

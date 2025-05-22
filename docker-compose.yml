@@ -1,0 +1,13 @@
+services:
+  tesla-buddy-microservice:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+      args:
+        NPM_TOKEN: ${NPM_TOKEN}
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      - ./ms-playwright-linux:/root/.cache/ms-playwright

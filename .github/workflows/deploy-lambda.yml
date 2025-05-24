@@ -29,22 +29,11 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
-      - name: Create Playwright Lambda Layer with timestamp
+      - name: Create Playwright Lambda Layer
         run: |
-          TIMESTAMP=$(date +%Y%m%d%H%M%S)
-          mkdir -p /tmp/playwright-layer/nodejs/node_modules
-          
-          # Copy only necessary Playwright files with more targeted approach
-          cp -r node_modules/playwright-core /tmp/playwright-layer/nodejs/node_modules/
-          cp -r node_modules/playwright /tmp/playwright-layer/nodejs/node_modules/
-          
-          # Create version file to track layer contents
-          echo "Build timestamp: $TIMESTAMP" > /tmp/playwright-layer/version.txt
-          
-          cd /tmp/playwright-layer && zip -r playwright-browsers-lambda-layer-$TIMESTAMP.zip .
-          
-          # Save timestamp for later steps
-          echo "LAYER_TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
+          mkdir -p /tmp/playwright-layer/nodejs
+          cp -r node_modules/playwright* /tmp/playwright-layer/nodejs/
+          cd /tmp/playwright-layer && zip -r playwright-browsers-lambda-layer.zip .
 
       - name: Install AWS CLI (if not present)
         run: |
@@ -59,7 +48,7 @@ jobs:
 
       - name: Upload Playwright Layer to S3 using AWS CLI
         run: |
-          aws s3 cp /tmp/playwright-layer/playwright-browsers-lambda-layer-$LAYER_TIMESTAMP.zip s3://${{ secrets.LAYER_BUCKET_NAME }}/
+          aws s3 cp /tmp/playwright-layer/playwright-browsers-lambda-layer.zip s3://${{ secrets.LAYER_BUCKET_NAME }}/
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

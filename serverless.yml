@@ -28,13 +28,13 @@ resources:
     PlaywrightLambdaLayer:
       Type: AWS::Lambda::LayerVersion
       Properties:
-        LayerName: playwright-browsers-${param:stage}-${param:timestamp}
+        LayerName: playwright-browsers
         Description: Playwright browsers
         CompatibleRuntimes:
           - nodejs18.x
         Content:
           S3Bucket: ${self:custom.layerBucket}
-          S3Key: playwright-browsers-lambda-layer-${param:timestamp}.zip
+          S3Key: playwright-browsers-lambda-layer.zip
 
 custom:
   layerBucket: tesla-buddy-microservice-playwright  # Replace with your S3 bucket name

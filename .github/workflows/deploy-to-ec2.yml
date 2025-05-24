@@ -47,7 +47,6 @@ jobs:
         username: ${{ secrets.EC2_USERNAME }}
         key: ${{ secrets.EC2_SSH_KEY }}
         debug: true
-        script_stop: true  # Stop script after first error
         script: |
           echo "Connection successful!"
           whoami

@@ -104,7 +104,7 @@ jobs:
           # Run new container
           ${USE_SUDO} docker run -d \
             --name tesla-buddy-container \
-            -p 80:3000 \
+            -p 127.0.0.1:3000:3000 \  # Only expose to localhost, not publicly
             --restart unless-stopped \
             ${{ steps.login-ecr.outputs.registry }}/tesla-buddy-microservice:latest
           
@@ -112,3 +112,35 @@ jobs:
           
           # Verify container is running
           ${USE_SUDO} docker ps | grep tesla-buddy-container
+
+          # Install NGINX
+          echo "Installing NGINX for SSL termination..."
+          sudo amazon-linux-extras install nginx1 -y || sudo yum install -y nginx
+
+          # Install Certbot for Let's Encrypt SSL
+          echo "Installing Certbot for SSL certificates..."
+          sudo amazon-linux-extras install epel -y || sudo yum install -y epel-release
+          sudo yum install -y certbot certbot-nginx
+
+          # Create NGINX configuration
+          sudo bash -c 'cat > /etc/nginx/conf.d/tesla-buddy.conf << EOF
+          server {
+              listen 80;
+              server_name ec2-3-139-82-188.us-east-2.compute.amazonaws.com;
+              
+              location / {
+                  proxy_pass http://localhost:3000;
+                  proxy_set_header Host \$host;
+                  proxy_set_header X-Real-IP \$remote_addr;
+                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto \$scheme;
+              }
+          }
+          EOF'
+
+          # Test and reload NGINX
+          sudo nginx -t && sudo systemctl enable nginx && sudo systemctl start nginx
+
+          # Get SSL certificate
+          echo "Obtaining SSL certificate..."
+          sudo certbot --nginx -d ec2-3-139-82-188.us-east-2.compute.amazonaws.com --non-interactive --agree-tos --email dellhater125@gmail.com

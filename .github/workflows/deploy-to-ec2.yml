@@ -101,11 +101,13 @@ jobs:
           ${USE_SUDO} docker rm tesla-buddy-container || echo "No container to remove"
           
           echo "Starting new container..."
-          # Run new container
+          # Run new container with environment variables
           ${USE_SUDO} docker run -d \
             --name tesla-buddy-container \
             -p 3000:3000 \
             --restart unless-stopped \
+            -e NODE_ENV=production \
+            -e OTHER_ENV_VAR=${{ secrets.EXPO_PUBLIC_TESLA_API_BASE_URL }} \
             ${{ steps.login-ecr.outputs.registry }}/tesla-buddy-microservice:latest || { echo "Failed to start container"; exit 1; }
           
           echo "Container started successfully"

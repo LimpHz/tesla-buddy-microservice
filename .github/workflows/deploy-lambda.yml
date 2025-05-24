@@ -30,7 +30,6 @@ jobs:
         run: |
           mkdir -p /tmp/playwright-layer/nodejs
           cp -r node_modules/playwright* /tmp/playwright-layer/nodejs/
-          cp -r node_modules/.playwright /tmp/playwright-layer/nodejs/
           cd /tmp/playwright-layer && zip -r playwright-browsers-lambda-layer.zip .
 
       - name: Upload Playwright Layer to S3

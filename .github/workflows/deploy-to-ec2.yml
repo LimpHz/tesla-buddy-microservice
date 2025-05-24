@@ -46,20 +46,55 @@ jobs:
         host: ${{ secrets.EC2_HOST }}
         username: ${{ secrets.EC2_USERNAME }}
         key: ${{ secrets.EC2_SSH_KEY }}
+        debug: true  # Enable debug mode
         script: |
-          # Login to ECR
-          aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+          echo "Starting deployment on EC2..."
           
-          # Pull the latest image
-          docker pull ${{ steps.login-ecr.outputs.registry }}/tesla-buddy-microservice:latest
+          # Check if AWS CLI is installed
+          if ! command -v aws &> /dev/null; then
+            echo "AWS CLI not found, installing..."
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            sudo ./aws/install
+            echo "AWS CLI installed"
+          fi
+          
+          echo "AWS CLI version: $(aws --version)"
+          
+          # Check if Docker is installed
+          if ! command -v docker &> /dev/null; then
+            echo "Docker not found, installation required"
+            exit 1
+          fi
+          
+          echo "Docker version: $(docker --version)"
+          
+          # Try ECR login with error handling
+          echo "Attempting ECR login..."
+          aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }} || { echo "ECR login failed"; exit 1; }
+          
+          echo "ECR login successful"
+          
+          # Pull the latest image with error handling
+          echo "Pulling latest image..."
+          docker pull ${{ steps.login-ecr.outputs.registry }}/tesla-buddy-microservice:latest || { echo "Failed to pull image"; exit 1; }
+          
+          echo "Image pulled successfully"
           
           # Stop existing container if running
-          docker stop tesla-buddy-container || true
-          docker rm tesla-buddy-container || true
+          echo "Cleaning up existing containers..."
+          docker stop tesla-buddy-container || echo "No container to stop"
+          docker rm tesla-buddy-container || echo "No container to remove"
           
+          echo "Starting new container..."
           # Run new container
           docker run -d \
             --name tesla-buddy-container \
             -p 3000:3000 \
             --restart unless-stopped \
-            ${{ steps.login-ecr.outputs.registry }}/tesla-buddy-microservice:latest
+            ${{ steps.login-ecr.outputs.registry }}/tesla-buddy-microservice:latest || { echo "Failed to start container"; exit 1; }
+          
+          echo "Container started successfully"
+          
+          # Verify container is running
+          docker ps | grep tesla-buddy-container

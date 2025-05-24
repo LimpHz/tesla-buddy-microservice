@@ -14,6 +14,9 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18'
+          
+      - name: Install Serverless Framework
+        run: npm install -g serverless@3.33.0  # Install a specific compatible version
 
       - name: Configure npmrc for GitHub Packages
         run: |
@@ -52,9 +55,9 @@ jobs:
           AWS_DEFAULT_REGION: us-east-2
 
       - name: Deploy to AWS Lambda
-        uses: serverless/github-action@v3
-        with:
-          args: deploy --stage prod
+        run: |
+          serverless --version  # Debug to verify version
+          serverless deploy --stage prod
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

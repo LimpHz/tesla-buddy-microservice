@@ -104,7 +104,7 @@ jobs:
           # Run new container
           ${USE_SUDO} docker run -d \
             --name tesla-buddy-container \
-            -p 3000:3000 \
+            -p 443:3000 \
             --restart unless-stopped \
             ${{ steps.login-ecr.outputs.registry }}/tesla-buddy-microservice:latest || { echo "Failed to start container"; exit 1; }
           

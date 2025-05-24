@@ -50,6 +50,7 @@ jobs:
         script: |
           echo "Connection successful!"
           whoami
+          
           # Check if AWS CLI is installed
           if ! command -v aws &> /dev/null; then
             echo "AWS CLI not found, installing..."
@@ -61,34 +62,47 @@ jobs:
           
           echo "AWS CLI version: $(aws --version)"
           
-          # Check if Docker is installed
+          # Check if Docker is installed, install if not
           if ! command -v docker &> /dev/null; then
-            echo "Docker not found, installation required"
-            exit 1
+            echo "Docker not found, installing..."
+            sudo yum update -y
+            sudo yum install -y docker
+            sudo systemctl start docker
+            sudo systemctl enable docker
+            sudo usermod -a -G docker $(whoami)
+            echo "Docker installed, you might need to reconnect for group changes to take effect"
+            # Try to use docker without reconnecting
+            sudo docker --version
+            # Use sudo for docker commands below since group membership isn't active yet
+            echo "Using sudo for docker commands in this session"
+            USE_SUDO=sudo
+          else
+            echo "Docker is already installed"
+            USE_SUDO=""
           fi
           
-          echo "Docker version: $(docker --version)"
+          echo "Docker version: $(${USE_SUDO} docker --version || echo 'Cannot get Docker version')"
           
           # Try ECR login with error handling
           echo "Attempting ECR login..."
-          aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }} || { echo "ECR login failed"; exit 1; }
+          aws ecr get-login-password --region us-east-2 | ${USE_SUDO} docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }} || { echo "ECR login failed"; exit 1; }
           
           echo "ECR login successful"
           
           # Pull the latest image with error handling
           echo "Pulling latest image..."
-          docker pull ${{ steps.login-ecr.outputs.registry }}/tesla-buddy-microservice:latest || { echo "Failed to pull image"; exit 1; }
+          ${USE_SUDO} docker pull ${{ steps.login-ecr.outputs.registry }}/tesla-buddy-microservice:latest || { echo "Failed to pull image"; exit 1; }
           
           echo "Image pulled successfully"
           
           # Stop existing container if running
           echo "Cleaning up existing containers..."
-          docker stop tesla-buddy-container || echo "No container to stop"
-          docker rm tesla-buddy-container || echo "No container to remove"
+          ${USE_SUDO} docker stop tesla-buddy-container || echo "No container to stop"
+          ${USE_SUDO} docker rm tesla-buddy-container || echo "No container to remove"
           
           echo "Starting new container..."
           # Run new container
-          docker run -d \
+          ${USE_SUDO} docker run -d \
             --name tesla-buddy-container \
             -p 3000:3000 \
             --restart unless-stopped \
@@ -97,4 +111,4 @@ jobs:
           echo "Container started successfully"
           
           # Verify container is running
-          docker ps | grep tesla-buddy-container
+          ${USE_SUDO} docker ps | grep tesla-buddy-container

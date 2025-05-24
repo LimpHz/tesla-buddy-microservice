@@ -1,0 +1,51 @@
+service: tesla-buddy-microservice
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+  memorySize: 512  # Increased for Playwright
+  timeout: 30
+  environment:
+    NODE_ENV: production
+
+functions:
+  api:
+    handler: dist/lambda.handler
+    events:
+      - httpApi:
+          path: /{proxy+}
+          method: any
+          cors: true
+    # For Playwright, we need a Lambda Layer with browser binaries
+    layers:
+      - !Ref PlaywrightLambdaLayer
+
+# Define a custom Lambda Layer for Playwright
+resources:
+  Resources:
+    PlaywrightLambdaLayer:
+      Type: AWS::Lambda::LayerVersion
+      Properties:
+        LayerName: playwright-browsers
+        Description: Playwright browsers
+        CompatibleRuntimes:
+          - nodejs18.x
+        Content:
+          S3Bucket: ${self:custom.layerBucket}
+          S3Key: playwright-browsers-lambda-layer.zip
+
+custom:
+  layerBucket: tesla-buddy-microservice-playwright  # Replace with your S3 bucket name
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: true
+    exclude: ['aws-sdk']
+    target: 'node18'
+    platform: 'node'
+
+plugins:
+  - serverless-esbuild
+  - serverless-offline

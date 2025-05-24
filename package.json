@@ -23,13 +23,17 @@
   },
   "homepage": "https://github.com/LimpHz/tesla-buddy-microservice#readme",
   "dependencies": {
-    "@limphz/tesla-api-utilities": "^0.1.13-alpha",
+    "@limphz/tesla-api-utilities": "^0.1.16-alpha",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "typescript": "^5.8.3"
   },
   "devDependencies": {
     "@types/cors": "^2.8.18",
-    "@types/express": "^5.0.1"
+    "@types/express": "^5.0.1",
+    "esbuild": "^0.25.4",
+    "serverless": "^4.14.4",
+    "serverless-esbuild": "^1.55.0",
+    "serverless-offline": "^14.4.0"
   }
 }

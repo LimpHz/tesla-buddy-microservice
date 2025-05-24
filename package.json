@@ -8,7 +8,10 @@
     "npm-login": "npm login --auth-type=legacy --registry=https://npm.pkg.github.com/ --scope=@limphz",
     "build": "tsc",
     "start": "node dist/app.js",
-    "build:start": "npm run build && npm run start"
+    "build:start": "npm run build && npm run start",
+    "deploy": "serverless deploy",
+    "deploy:prod": "serverless deploy --stage prod",
+    "deploy:local": "serverless offline"
   },
   "repository": {
     "type": "git",
@@ -29,6 +32,7 @@
     "typescript": "^5.8.3"
   },
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.149",
     "@types/cors": "^2.8.18",
     "@types/express": "^5.0.1",
     "esbuild": "^0.25.4",

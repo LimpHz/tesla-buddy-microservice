@@ -1,4 +1,5 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+import { getInventory } from './controllers/inventoryController';
 
 // Lambda handler function
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
@@ -40,8 +41,19 @@ async function processRequest(path: string, method: string, headers: any, query:
   
   // Example:
   if (path.startsWith('/api/tesla') && method === 'GET') {
-    // Call your existing Tesla API handler
-    // return yourTeslaController.getVehicles(query);
+    if (path.indexOf('inventory') >= 0) {
+      // Mock req and res objects for controller compatibility
+      return await new Promise((resolve, reject) => {
+        const req = { headers, query, body };
+        const res = {
+          status: (statusCode: number) => ({
+            json: (data: any) => resolve({ statusCode, data })
+          }),
+          json: (data: any) => resolve({ statusCode: 200, data })
+        };
+        getInventory(req as any, res as any).catch(reject);
+      });
+    }
   }
   
   // Add mappings for all your endpoints

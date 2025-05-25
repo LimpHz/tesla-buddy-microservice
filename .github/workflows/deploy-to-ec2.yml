@@ -124,11 +124,28 @@ jobs:
           # Modify the main nginx.conf to increase hash bucket size
           sudo bash -c 'grep -q "server_names_hash_bucket_size" /etc/nginx/nginx.conf || sed -i "/http {/a \    server_names_hash_bucket_size 128;" /etc/nginx/nginx.conf'
 
-          # Create site configuration
+          # Generate self-signed certificate
+          echo "Generating self-signed certificate..."
+          sudo mkdir -p /etc/nginx/ssl
+          sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout /etc/nginx/ssl/nginx.key \
+            -out /etc/nginx/ssl/nginx.crt \
+            -subj "/CN=ec2-3-139-82-188.us-east-2.compute.amazonaws.com"
+
+          # Update NGINX configuration for SSL
           sudo bash -c 'cat > /etc/nginx/conf.d/tesla-buddy.conf << EOF
           server {
               listen 80;
               server_name ec2-3-139-82-188.us-east-2.compute.amazonaws.com;
+              return 301 https://\$host\$request_uri;
+          }
+
+          server {
+              listen 443 ssl;
+              server_name ec2-3-139-82-188.us-east-2.compute.amazonaws.com;
+              
+              ssl_certificate /etc/nginx/ssl/nginx.crt;
+              ssl_certificate_key /etc/nginx/ssl/nginx.key;
               
               location / {
                   proxy_pass http://localhost:3000;

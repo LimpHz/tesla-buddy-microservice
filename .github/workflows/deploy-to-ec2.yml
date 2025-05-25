@@ -186,7 +186,3 @@ jobs:
 
           # Test and reload NGINX
           sudo nginx -t && sudo systemctl enable nginx && sudo systemctl start nginx
-
-          # Get SSL certificate
-          echo "Obtaining SSL certificate..."
-          sudo certbot --nginx -d ec2-3-139-82-188.us-east-2.compute.amazonaws.com --non-interactive --agree-tos --email dellhater125@gmail.com

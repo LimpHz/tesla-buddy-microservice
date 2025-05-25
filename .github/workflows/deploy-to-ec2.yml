@@ -51,6 +51,33 @@ jobs:
           echo "Connection successful!"
           whoami
           
+          # Check disk space before cleanup
+          echo "Current disk space:"
+          df -h
+          
+          # Clean up disk space
+          echo "Cleaning up disk space..."
+          
+          # Clean Docker system (prune unused containers, images, networks, and volumes)
+          ${USE_SUDO} docker system prune -af --volumes
+          
+          # Clean package manager cache
+          sudo yum clean all
+          
+          # Remove temporary files
+          sudo rm -rf /tmp/*
+          
+          # Check disk space after cleanup
+          echo "Disk space after cleanup:"
+          df -h
+          
+          # If still low on space, consider cleaning logs
+          if [ $(df / | awk 'NR==2 {print $5}' | sed 's/%//') -gt 85 ]; then
+            echo "Still low on disk space, cleaning logs..."
+            sudo journalctl --vacuum-time=1d
+            sudo find /var/log -type f -name "*.log" -exec truncate -s 0 {} \;
+          fi
+          
           # Check if AWS CLI is installed
           if ! command -v aws &> /dev/null; then
             echo "AWS CLI not found, installing..."

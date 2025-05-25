@@ -104,7 +104,7 @@ jobs:
           # Run new container
           ${USE_SUDO} docker run -d \
             --name tesla-buddy-container \
-            -p 127.0.0.1:3000:3000 \  # Only expose to localhost, not publicly
+            -p 127.0.0.1:3000:3000 \
             --restart unless-stopped \
             ${{ steps.login-ecr.outputs.registry }}/tesla-buddy-microservice:latest
           
@@ -115,12 +115,11 @@ jobs:
 
           # Install NGINX
           echo "Installing NGINX for SSL termination..."
-          sudo amazon-linux-extras install nginx1 -y || sudo yum install -y nginx
+          sudo yum install -y nginx
 
           # Install Certbot for Let's Encrypt SSL
           echo "Installing Certbot for SSL certificates..."
-          sudo amazon-linux-extras install epel -y || sudo yum install -y epel-release
-          sudo yum install -y certbot certbot-nginx
+          sudo yum install -y certbot python3-certbot-nginx
 
           # Modify the main nginx.conf to increase hash bucket size
           sudo bash -c 'grep -q "server_names_hash_bucket_size" /etc/nginx/nginx.conf || sed -i "/http {/a \    server_names_hash_bucket_size 128;" /etc/nginx/nginx.conf'

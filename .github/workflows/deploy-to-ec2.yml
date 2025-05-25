@@ -122,7 +122,10 @@ jobs:
           sudo amazon-linux-extras install epel -y || sudo yum install -y epel-release
           sudo yum install -y certbot certbot-nginx
 
-          # Create NGINX configuration
+          # Modify the main nginx.conf to increase hash bucket size
+          sudo bash -c 'grep -q "server_names_hash_bucket_size" /etc/nginx/nginx.conf || sed -i "/http {/a \    server_names_hash_bucket_size 128;" /etc/nginx/nginx.conf'
+
+          # Create site configuration
           sudo bash -c 'cat > /etc/nginx/conf.d/tesla-buddy.conf << EOF
           server {
               listen 80;

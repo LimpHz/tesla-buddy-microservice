@@ -128,11 +128,13 @@ jobs:
           ${USE_SUDO} docker rm tesla-buddy-container || echo "No container to remove"
           
           echo "Starting new container..."
-          # Run new container
+          # Run new container with rate limit configuration
           ${USE_SUDO} docker run -d \
             --name tesla-buddy-container \
             -p 127.0.0.1:3000:3000 \
             --restart unless-stopped \
+            -e RATE_LIMIT_MAX=200 \
+            -e RATE_LIMIT_WINDOW_MS=900000 \
             ${{ steps.login-ecr.outputs.registry }}/tesla-buddy-microservice:latest
           
           echo "Container started successfully"

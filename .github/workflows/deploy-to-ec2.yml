@@ -38,7 +38,7 @@ jobs:
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
         
-        echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
     
     - name: Deploy to EC2
       uses: appleboy/ssh-action@master
@@ -48,217 +48,98 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         port: 22
         script: |
-          echo "Connection successful!"
-          whoami
-          
-          # Check disk space before cleanup
-          echo "Current disk space:"
-          df -h
-          
-          # Clean up disk space
           echo "Cleaning up disk space..."
+          docker system prune -af --volumes
           
-          # Clean Docker system (prune unused containers, images, networks, and volumes)
-          ${USE_SUDO} docker system prune -af --volumes
+          echo "Logging in to ECR..."
+          aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
           
-          # Clean package manager cache
-          sudo yum clean all
-          
-          # Remove temporary files
-          sudo rm -rf /tmp/*
-          
-          # Check disk space after cleanup
-          echo "Disk space after cleanup:"
-          df -h
-          
-          # If still low on space, consider cleaning logs
-          if [ $(df / | awk 'NR==2 {print $5}' | sed 's/%//') -gt 85 ]; then
-            echo "Still low on disk space, cleaning logs..."
-            sudo journalctl --vacuum-time=1d
-            sudo find /var/log -type f -name "*.log" -exec truncate -s 0 {} \;
-          fi
-          
-          # Check if AWS CLI is installed
-          if ! command -v aws &> /dev/null; then
-            echo "AWS CLI not found, installing..."
-            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-            unzip awscliv2.zip
-            sudo ./aws/install
-            echo "AWS CLI installed"
-          fi
-          
-          echo "AWS CLI version: $(aws --version)"
-          
-          # Check if Docker is installed, install if not
-          if ! command -v docker &> /dev/null; then
-            echo "Docker not found, installing..."
-            sudo yum update -y
-            sudo yum install -y docker
-            sudo systemctl start docker
-            sudo systemctl enable docker
-            sudo usermod -a -G docker $(whoami)
-            echo "Docker installed, you might need to reconnect for group changes to take effect"
-            # Try to use docker without reconnecting
-            sudo docker --version
-            # Use sudo for docker commands below since group membership isn't active yet
-            echo "Using sudo for docker commands in this session"
-            USE_SUDO=sudo
-          else
-            echo "Docker is already installed"
-            USE_SUDO=""
-          fi
-          
-          echo "Docker version: $(${USE_SUDO} docker --version || echo 'Cannot get Docker version')"
-          
-          # Try ECR login with error handling
-          echo "Attempting ECR login..."
-          aws ecr get-login-password --region us-east-2 | ${USE_SUDO} docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }} || { echo "ECR login failed"; exit 1; }
-          
-          echo "ECR login successful"
-          
-          # Pull the latest image with error handling
           echo "Pulling latest image..."
-          ${USE_SUDO} docker pull ${{ steps.login-ecr.outputs.registry }}/tesla-buddy-microservice:latest || { echo "Failed to pull image"; exit 1; }
+          docker pull ${{ steps.login-ecr.outputs.registry }}/tesla-buddy-microservice:latest
           
-          echo "Image pulled successfully"
-          
-          # Stop existing container if running
-          echo "Cleaning up existing containers..."
-          ${USE_SUDO} docker stop tesla-buddy-container || echo "No container to stop"
-          ${USE_SUDO} docker rm tesla-buddy-container || echo "No container to remove"
+          echo "Stopping existing container..."
+          docker stop tesla-buddy-container || echo "No container to stop"
+          docker rm tesla-buddy-container || echo "No container to remove"
           
           echo "Starting new container..."
-          # Run new container with rate limit configuration
-          ${USE_SUDO} docker run -d \
+          docker run -d \
             --name tesla-buddy-container \
             -p 127.0.0.1:3000:3000 \
             --restart unless-stopped \
-            -e RATE_LIMIT_MAX=200 \
+            -e RATE_LIMIT_MAX=500 \
             -e RATE_LIMIT_WINDOW_MS=900000 \
             ${{ steps.login-ecr.outputs.registry }}/tesla-buddy-microservice:latest
           
           echo "Container started successfully"
           
-          # Verify container is running
-          ${USE_SUDO} docker ps | grep tesla-buddy-container
-
-          # Install NGINX with SSL support
-          echo "Installing NGINX with SSL support..."
-          sudo yum install -y nginx openssl
-
-          # Check if NGINX SSL module is installed
-          echo "Checking if NGINX SSL module is installed:"
-          sudo nginx -V 2>&1 | grep -o with-http_ssl_module
-
-          # Generate self-signed certificate
-          echo "Generating self-signed certificate..."
-          sudo mkdir -p /etc/nginx/ssl
-          sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-            -keyout /etc/nginx/ssl/nginx.key \
-            -out /etc/nginx/ssl/nginx.crt \
-            -subj "/CN=ec2-3-139-82-188.us-east-2.compute.amazonaws.com"
+          # Only run these commands if NGINX/SSL is not already set up
+          if [ ! -f /etc/nginx/ssl/nginx.crt ]; then
+            echo "Setting up HTTPS with NGINX..."
             
-          # Fix SSL certificate permissions
-          echo "Setting proper permissions for SSL certificates:"
-          sudo chmod 600 /etc/nginx/ssl/nginx.key
-          sudo chmod 644 /etc/nginx/ssl/nginx.crt
-          sudo chown nginx:nginx /etc/nginx/ssl/nginx.key /etc/nginx/ssl/nginx.crt
+            # Install NGINX if needed
+            command -v nginx >/dev/null 2>&1 || sudo yum install -y nginx openssl
+            
+            # Generate self-signed certificate
+            sudo mkdir -p /etc/nginx/ssl
+            sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+              -keyout /etc/nginx/ssl/nginx.key \
+              -out /etc/nginx/ssl/nginx.crt \
+              -subj "/CN=ec2-3-139-82-188.us-east-2.compute.amazonaws.com"
+              
+            # Fix SSL certificate permissions
+            sudo chmod 600 /etc/nginx/ssl/nginx.key
+            sudo chmod 644 /etc/nginx/ssl/nginx.crt
+            sudo chown nginx:nginx /etc/nginx/ssl/nginx.key /etc/nginx/ssl/nginx.crt
+            
+            # Update NGINX configuration
+            sudo bash -c 'grep -q "server_names_hash_bucket_size" /etc/nginx/nginx.conf || sed -i "/http {/a \    server_names_hash_bucket_size 128;" /etc/nginx/nginx.conf'
+            
+            # Create NGINX configuration files
+            sudo bash -c 'cat > /etc/nginx/conf.d/tesla-buddy.conf << EOF
+            # HTTP redirect to HTTPS
+            server {
+                listen 80;
+                server_name ec2-3-139-82-188.us-east-2.compute.amazonaws.com;
+                return 301 https://\$host\$request_uri;
+            }
 
-          # Verify certificate files are valid
-          echo "Verifying SSL certificate files:"
-          sudo openssl x509 -in /etc/nginx/ssl/nginx.crt -text -noout | grep -E 'Subject:|Not Before:|Not After:'
-
-          # Modify the main nginx.conf to increase hash bucket size
-          sudo bash -c 'grep -q "server_names_hash_bucket_size" /etc/nginx/nginx.conf || sed -i "/http {/a \    server_names_hash_bucket_size 128;" /etc/nginx/nginx.conf'
-
-          # Create a simpler NGINX configuration file
-          echo "Creating NGINX configuration for SSL..."
-          sudo bash -c 'cat > /etc/nginx/conf.d/tesla-buddy.conf << EOF
-          # HTTP redirect to HTTPS
-          server {
-              listen 80;
-              listen [::]:80;
-              server_name ec2-3-139-82-188.us-east-2.compute.amazonaws.com;
-              
-              access_log /var/log/nginx/tesla-api-access.log;
-              error_log /var/log/nginx/tesla-api-error.log;
-              
-              return 301 https://\$host\$request_uri;
-          }
-
-          # HTTPS server
-          server {
-              listen 443 ssl;
-              listen [::]:443 ssl;
-              server_name ec2-3-139-82-188.us-east-2.compute.amazonaws.com;
-              
-              access_log /var/log/nginx/tesla-api-ssl-access.log;
-              error_log /var/log/nginx/tesla-api-ssl-error.log;
-              
-              ssl_certificate /etc/nginx/ssl/nginx.crt;
-              ssl_certificate_key /etc/nginx/ssl/nginx.key;
-              ssl_protocols TLSv1.2 TLSv1.3;
-              
-              # Health check endpoint
-              location = /health {
-                  return 200 "NGINX is healthy!";
-                  add_header Content-Type text/plain;
-              }
-              
-              # API proxy
-              location / {
-                  proxy_pass http://localhost:3000;
-                  proxy_http_version 1.1;
-                  proxy_set_header Host \$host;
-                  proxy_set_header X-Real-IP \$remote_addr;
-                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                  proxy_set_header X-Forwarded-Proto \$scheme;
-              }
-          }
-          EOF'
+            # HTTPS server
+            server {
+                listen 443 ssl;
+                server_name ec2-3-139-82-188.us-east-2.compute.amazonaws.com;
+                
+                ssl_certificate /etc/nginx/ssl/nginx.crt;
+                ssl_certificate_key /etc/nginx/ssl/nginx.key;
+                ssl_protocols TLSv1.2 TLSv1.3;
+                
+                location = /health {
+                    return 200 "Service is healthy!";
+                    add_header Content-Type text/plain;
+                }
+                
+                location / {
+                    proxy_pass http://localhost:3000;
+                    proxy_http_version 1.1;
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                }
+            }
+            EOF'
+            
+            # Remove default config and restart NGINX
+            sudo rm -f /etc/nginx/conf.d/default.conf
+            sudo nginx -t && sudo systemctl restart nginx
+          else
+            echo "HTTPS already configured, skipping setup"
+          fi
           
-          # Remove any default config that might conflict
-          echo "Removing default NGINX configurations that might conflict:"
-          sudo rm -f /etc/nginx/conf.d/default.conf
-          
-          # Check NGINX configuration
-          echo "Checking NGINX configuration:"
-          sudo nginx -t
-
-          # Restart NGINX completely
-          echo "Restarting NGINX completely:"
-          sudo systemctl stop nginx
-          sudo systemctl start nginx
-
-          # Verify NGINX started properly
-          echo "Checking NGINX status:"
-          sudo systemctl status nginx
-
-          # Check if NGINX is now listening on both ports
-          echo "Checking if NGINX is listening on ports 80 and 443:"
-          sudo ss -tulpn | grep -E ':80|:443'
-
-          # Test NGINX connectivity directly
-          echo "Testing NGINX connectivity:"
-          curl -v -k https://localhost/health
-
-          # Check NGINX error logs if there are issues
-          echo "Checking NGINX error logs:"
-          sudo tail -n 50 /var/log/nginx/error.log
-
-          # Check if firewalld or iptables is blocking connections
+          # Ensure firewall allows HTTP/HTTPS
           if command -v firewall-cmd &> /dev/null; then
-            echo "Checking firewalld status:"
-            sudo firewall-cmd --list-all
-            echo "Ensuring ports 80 and 443 are open in firewalld:"
             sudo firewall-cmd --permanent --add-service=http
             sudo firewall-cmd --permanent --add-service=https
             sudo firewall-cmd --reload
-          elif command -v iptables &> /dev/null; then
-            echo "Checking iptables rules:"
-            sudo iptables -L -n
-            echo "Ensuring ports 80 and 443 are allowed in iptables:"
-            sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT
-            sudo iptables -I INPUT -p tcp --dport 443 -j ACCEPT
-            sudo service iptables save || echo "iptables service not available for saving"
           fi
+          
+          echo "Deployment completed successfully"

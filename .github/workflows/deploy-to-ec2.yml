@@ -140,16 +140,13 @@ jobs:
           # Verify container is running
           ${USE_SUDO} docker ps | grep tesla-buddy-container
 
-          # Install NGINX
-          echo "Installing NGINX for SSL termination..."
-          sudo yum install -y nginx
+          # Install NGINX with SSL support
+          echo "Installing NGINX with SSL support..."
+          sudo yum install -y nginx openssl
 
-          # Install Certbot for Let's Encrypt SSL
-          echo "Installing Certbot for SSL certificates..."
-          sudo yum install -y certbot python3-certbot-nginx
-
-          # Modify the main nginx.conf to increase hash bucket size
-          sudo bash -c 'grep -q "server_names_hash_bucket_size" /etc/nginx/nginx.conf || sed -i "/http {/a \    server_names_hash_bucket_size 128;" /etc/nginx/nginx.conf'
+          # Check if NGINX SSL module is installed
+          echo "Checking if NGINX SSL module is installed:"
+          sudo nginx -V 2>&1 | grep -o with-http_ssl_module
 
           # Generate self-signed certificate
           echo "Generating self-signed certificate..."
@@ -158,38 +155,47 @@ jobs:
             -keyout /etc/nginx/ssl/nginx.key \
             -out /etc/nginx/ssl/nginx.crt \
             -subj "/CN=ec2-3-139-82-188.us-east-2.compute.amazonaws.com"
+            
+          # Fix SSL certificate permissions
+          echo "Setting proper permissions for SSL certificates:"
+          sudo chmod 600 /etc/nginx/ssl/nginx.key
+          sudo chmod 644 /etc/nginx/ssl/nginx.crt
+          sudo chown nginx:nginx /etc/nginx/ssl/nginx.key /etc/nginx/ssl/nginx.crt
 
-          # Update NGINX configuration for SSL
+          # Verify certificate files are valid
+          echo "Verifying SSL certificate files:"
+          sudo openssl x509 -in /etc/nginx/ssl/nginx.crt -text -noout | grep -E 'Subject:|Not Before:|Not After:'
+
+          # Modify the main nginx.conf to increase hash bucket size
+          sudo bash -c 'grep -q "server_names_hash_bucket_size" /etc/nginx/nginx.conf || sed -i "/http {/a \    server_names_hash_bucket_size 128;" /etc/nginx/nginx.conf'
+
+          # Create a simpler NGINX configuration file
+          echo "Creating NGINX configuration for SSL..."
           sudo bash -c 'cat > /etc/nginx/conf.d/tesla-buddy.conf << EOF
+          # HTTP redirect to HTTPS
           server {
-              listen 80 default_server;
-              listen [::]:80 default_server;
+              listen 80;
+              listen [::]:80;
               server_name ec2-3-139-82-188.us-east-2.compute.amazonaws.com;
               
               access_log /var/log/nginx/tesla-api-access.log;
-              error_log /var/log/nginx/tesla-api-error.log debug;
+              error_log /var/log/nginx/tesla-api-error.log;
               
               return 301 https://\$host\$request_uri;
           }
 
+          # HTTPS server
           server {
-              listen 443 ssl default_server;
-              listen [::]:443 ssl default_server;
+              listen 443 ssl;
+              listen [::]:443 ssl;
               server_name ec2-3-139-82-188.us-east-2.compute.amazonaws.com;
               
               access_log /var/log/nginx/tesla-api-ssl-access.log;
-              error_log /var/log/nginx/tesla-api-ssl-error.log debug;
+              error_log /var/log/nginx/tesla-api-ssl-error.log;
               
               ssl_certificate /etc/nginx/ssl/nginx.crt;
               ssl_certificate_key /etc/nginx/ssl/nginx.key;
               ssl_protocols TLSv1.2 TLSv1.3;
-              
-              # Basic settings
-              sendfile on;
-              tcp_nopush on;
-              tcp_nodelay on;
-              keepalive_timeout 65;
-              types_hash_max_size 2048;
               
               # Health check endpoint
               location = /health {
@@ -197,6 +203,7 @@ jobs:
                   add_header Content-Type text/plain;
               }
               
+              # API proxy
               location / {
                   proxy_pass http://localhost:3000;
                   proxy_http_version 1.1;
@@ -204,31 +211,38 @@ jobs:
                   proxy_set_header X-Real-IP \$remote_addr;
                   proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
                   proxy_set_header X-Forwarded-Proto \$scheme;
-                  proxy_set_header Upgrade \$http_upgrade;
-                  proxy_set_header Connection "upgrade";
-                  proxy_read_timeout 90s;
               }
           }
           EOF'
-
-          # Test and reload NGINX
-          sudo nginx -t && sudo systemctl enable nginx && sudo systemctl start nginx
-
-          # After starting NGINX, add these debugging steps
-          echo "Checking NGINX status:"
-          sudo systemctl status nginx
-
-          echo "Checking if NGINX is listening on ports 80 and 443:"
-          sudo ss -tulpn | grep -E ':80|:443'
-
+          
+          # Remove any default config that might conflict
+          echo "Removing default NGINX configurations that might conflict:"
+          sudo rm -f /etc/nginx/conf.d/default.conf
+          
+          # Check NGINX configuration
           echo "Checking NGINX configuration:"
           sudo nginx -t
 
-          echo "Checking if NGINX can connect to the container:"
-          curl -v http://localhost:3000/
+          # Restart NGINX completely
+          echo "Restarting NGINX completely:"
+          sudo systemctl stop nginx
+          sudo systemctl start nginx
 
-          echo "Checking container logs for errors:"
-          ${USE_SUDO} docker logs tesla-buddy-container
+          # Verify NGINX started properly
+          echo "Checking NGINX status:"
+          sudo systemctl status nginx
+
+          # Check if NGINX is now listening on both ports
+          echo "Checking if NGINX is listening on ports 80 and 443:"
+          sudo ss -tulpn | grep -E ':80|:443'
+
+          # Test NGINX connectivity directly
+          echo "Testing NGINX connectivity:"
+          curl -v -k https://localhost/health
+
+          # Check NGINX error logs if there are issues
+          echo "Checking NGINX error logs:"
+          sudo tail -n 50 /var/log/nginx/error.log
 
           # Check if firewalld or iptables is blocking connections
           if command -v firewall-cmd &> /dev/null; then

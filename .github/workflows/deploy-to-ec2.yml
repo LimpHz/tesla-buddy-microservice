@@ -162,27 +162,87 @@ jobs:
           # Update NGINX configuration for SSL
           sudo bash -c 'cat > /etc/nginx/conf.d/tesla-buddy.conf << EOF
           server {
-              listen 80;
+              listen 80 default_server;
+              listen [::]:80 default_server;
               server_name ec2-3-139-82-188.us-east-2.compute.amazonaws.com;
+              
+              access_log /var/log/nginx/tesla-api-access.log;
+              error_log /var/log/nginx/tesla-api-error.log debug;
+              
               return 301 https://\$host\$request_uri;
           }
 
           server {
-              listen 443 ssl;
+              listen 443 ssl default_server;
+              listen [::]:443 ssl default_server;
               server_name ec2-3-139-82-188.us-east-2.compute.amazonaws.com;
+              
+              access_log /var/log/nginx/tesla-api-ssl-access.log;
+              error_log /var/log/nginx/tesla-api-ssl-error.log debug;
               
               ssl_certificate /etc/nginx/ssl/nginx.crt;
               ssl_certificate_key /etc/nginx/ssl/nginx.key;
+              ssl_protocols TLSv1.2 TLSv1.3;
+              
+              # Basic settings
+              sendfile on;
+              tcp_nopush on;
+              tcp_nodelay on;
+              keepalive_timeout 65;
+              types_hash_max_size 2048;
+              
+              # Health check endpoint
+              location = /health {
+                  return 200 "NGINX is healthy!";
+                  add_header Content-Type text/plain;
+              }
               
               location / {
                   proxy_pass http://localhost:3000;
+                  proxy_http_version 1.1;
                   proxy_set_header Host \$host;
                   proxy_set_header X-Real-IP \$remote_addr;
                   proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
                   proxy_set_header X-Forwarded-Proto \$scheme;
+                  proxy_set_header Upgrade \$http_upgrade;
+                  proxy_set_header Connection "upgrade";
+                  proxy_read_timeout 90s;
               }
           }
           EOF'
 
           # Test and reload NGINX
           sudo nginx -t && sudo systemctl enable nginx && sudo systemctl start nginx
+
+          # After starting NGINX, add these debugging steps
+          echo "Checking NGINX status:"
+          sudo systemctl status nginx
+
+          echo "Checking if NGINX is listening on ports 80 and 443:"
+          sudo ss -tulpn | grep -E ':80|:443'
+
+          echo "Checking NGINX configuration:"
+          sudo nginx -t
+
+          echo "Checking if NGINX can connect to the container:"
+          curl -v http://localhost:3000/
+
+          echo "Checking container logs for errors:"
+          ${USE_SUDO} docker logs tesla-buddy-container
+
+          # Check if firewalld or iptables is blocking connections
+          if command -v firewall-cmd &> /dev/null; then
+            echo "Checking firewalld status:"
+            sudo firewall-cmd --list-all
+            echo "Ensuring ports 80 and 443 are open in firewalld:"
+            sudo firewall-cmd --permanent --add-service=http
+            sudo firewall-cmd --permanent --add-service=https
+            sudo firewall-cmd --reload
+          elif command -v iptables &> /dev/null; then
+            echo "Checking iptables rules:"
+            sudo iptables -L -n
+            echo "Ensuring ports 80 and 443 are allowed in iptables:"
+            sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT
+            sudo iptables -I INPUT -p tcp --dport 443 -j ACCEPT
+            sudo service iptables save || echo "iptables service not available for saving"
+          fi

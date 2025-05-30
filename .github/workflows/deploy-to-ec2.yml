@@ -62,12 +62,14 @@ jobs:
           docker rm tesla-buddy-container || echo "No container to remove"
           
           echo "Starting new container..."
+          # Modify the container environment variables
           docker run -d \
             --name tesla-buddy-container \
             -p 127.0.0.1:3000:3000 \
             --restart unless-stopped \
-            -e RATE_LIMIT_MAX=500 \
-            -e RATE_LIMIT_WINDOW_MS=900000 \
+            -e RATE_LIMIT_MAX=1000 \
+            -e RATE_LIMIT_WINDOW_MS=3600000 \
+            -e DISABLE_RATE_LIMIT=true \
             ${{ steps.login-ecr.outputs.registry }}/tesla-buddy-microservice:latest
           
           echo "Container started successfully"
